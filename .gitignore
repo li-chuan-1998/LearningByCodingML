@@ -1,0 +1,11 @@
+# Byte-compiled Python files
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
