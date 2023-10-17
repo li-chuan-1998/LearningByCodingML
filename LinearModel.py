@@ -22,7 +22,7 @@ class LinearRegressionModel:
         if inputs.shape[0] != labels.shape[0]:
             raise AssertionError("The number of instances in inputs and labels must be the same.")
         
-        self.scaler = MinMaxScaler()
+        self.scaler = StandardScaler()
         
         # Splitting the data into training and validation sets
         self.train_inputs, self.val_inputs, self.train_labels, self.val_labels = train_test_split(
@@ -56,7 +56,7 @@ class LinearRegressionModel:
         """
         return np.mean((X @ self.trainable_params - y) ** 2)
     
-    # Closed-form solutions: 
+    """Closed-form solutions""" 
     # 1) Normal Equation 2) Pseudoinverse (Singular Value Decomposition, SVD)
     # These 2 approach get very slow when the number of features grows large
     # The symbol "@" in numpy, tensorflow and pytorch is equivalent to matrix multiplication
@@ -118,8 +118,7 @@ class LinearRegressionModel:
         
         return self.trainable_params
     
-    # Gradient Descent
-    
+    """Gradient Descent"""
     # Batch Gradient Descent (BGD)
     # 1) ensure that all features have a similar scale (i.e. feature scaling) for faster convergence
     # 2) If a cost function is a convex & continuous function it is gurunteed that it will find the global minima
@@ -132,7 +131,7 @@ class LinearRegressionModel:
     
     # Mini-Batch Gradient Descent (mBGD)
     # 1) More stable than SGD by using a batch size of data points 
-    def _bgd(self, X: np.array, y: np.array, lr: float, epochs: int) -> np.array:
+    def _bgd(self, X: np.array, y: np.array, lr: float, epochs: int, val_X=None, val_y=None) -> np.array:
         """
         Batch Gradient Descent strategy.
         
@@ -141,17 +140,32 @@ class LinearRegressionModel:
         - y (np.array): Corresponding labels of shape (number of instances, 1).
         - lr (float): Learning rate.
         - epochs (int): Number of training epochs.
-        
+        - val_X (np.array, optional): Validation input data. If provided, used to compute validation loss.
+        - val_y (np.array, optional): Validation labels. If provided, used to compute validation loss.
+
         Returns:
         - np.array: Updated parameters after training.
         """
         m = len(X)
-        for _ in range(epochs):
+        epoch_iterator = tqdm(range(epochs), desc="Training", unit="epoch") if epochs > 1 else range(epochs)
+        for epoch in epoch_iterator:
             gradients = 2/m * X.T @ (X @ self.trainable_params - y)
             self.trainable_params -= lr * gradients
+
+            # Compute training loss and display
+            train_loss = self._mse_loss(X, y)
+            tqdm.write(f"Epoch {epoch+1}/{epochs}, Training Loss: {train_loss:.4f}", end="")
+
+            # If validation data is provided, compute and display validation loss
+            if val_X is not None and val_y is not None:
+                val_loss = self._mse_loss(val_X, val_y)
+                tqdm.write(f", Validation Loss: {val_loss:.4f}")
+            else:
+                tqdm.write("")
+
         return self.trainable_params
 
-    def _sgd(self, X: np.array, y: np.array, lr: float, epochs: int) -> np.array:
+    def _sgd(self, X: np.array, y: np.array, lr: float, epochs: int, val_X=None, val_y=None) -> np.array:
         """
         Stochastic Gradient Descent strategy.
         
@@ -165,16 +179,29 @@ class LinearRegressionModel:
         - np.array: Updated parameters after training.
         """
         m = len(X)
-        for epoch in range(epochs):
+        epoch_iterator = tqdm(range(epochs), desc="Training", unit="epoch") if epochs > 1 else range(epochs)
+        for epoch in epoch_iterator:
             for i in range(m):
                 random_index = np.random.randint(m)
                 xi = X[random_index:random_index+1]
                 yi = y[random_index:random_index+1]
                 gradients = 2 * xi.T @ (xi @ self.trainable_params - yi)
                 self.trainable_params -= lr * gradients
+
+            # Compute training loss and display
+            epoch_iterator.set_description(f"Epoch {epoch+1}/{epochs}")
+            
+            # If validation data is provided, compute and display validation loss
+            train_loss = self._mse_loss(X, y)
+            if val_X is not None and val_y is not None:
+                val_loss = self._mse_loss(val_X, val_y)
+                epoch_iterator.set_postfix({"Training Loss": train_loss, "Validation Loss": val_loss})
+            else:
+                epoch_iterator.set_postfix({"Training Loss": train_loss})
+
         return self.trainable_params
 
-    def _mbgd(self, X: np.array, y: np.array, lr: float, epochs: int, batch_size: int) -> np.array:
+    def _mbgd(self, X: np.array, y: np.array, lr: float, epochs: int, batch_size: int, val_X=None, val_y=None) -> np.array:
         """
         Mini-Batch Gradient Descent strategy.
         
@@ -190,7 +217,8 @@ class LinearRegressionModel:
         """
         m = len(X)
         n_batches = int(np.ceil(m / batch_size))
-        for epoch in range(epochs):
+        epoch_iterator = tqdm(range(epochs), desc="Training", unit="epoch") if epochs > 1 else range(epochs)
+        for epoch in epoch_iterator:
             indices = np.random.permutation(m)
             X_shuffled = X[indices]
             y_shuffled = y[indices]
@@ -201,6 +229,19 @@ class LinearRegressionModel:
                 yi = y_shuffled[start:end]
                 gradients = 2/batch_size * xi.T @ (xi @ self.trainable_params - yi)
                 self.trainable_params -= lr * gradients
+
+            # Compute training loss and display
+            epoch_iterator.set_description(f"Epoch {epoch+1}/{epochs}")
+            
+            # If validation data is provided, compute and display validation loss
+            train_loss = self._mse_loss(X, y)
+            if val_X is not None and val_y is not None:
+                val_loss = self._mse_loss(val_X, val_y)
+                epoch_iterator.set_postfix({"Training Loss": train_loss, "Validation Loss": val_loss})
+            else:
+                epoch_iterator.set_postfix({"Training Loss": train_loss})
+
+
         return self.trainable_params
 
     def train_gradient_descent(self, strategy: str = "BGD", lr: float = 0.01, epochs: int = 100, batch_size: int = 32) -> np.array:
@@ -223,12 +264,16 @@ class LinearRegressionModel:
         X = self._preprocess_data(self.train_inputs)
         y = self.train_labels
         
+        # Preprocess the validation data
+        val_X = self._preprocess_data(self.val_inputs)
+        val_y = self.val_labels
+        
         if strategy == "BGD":
-            return self._bgd(X, y, lr, epochs)
+            return self._bgd(X, y, lr, epochs, val_X, val_y)
         elif strategy == "SGD":
-            return self._sgd(X, y, lr, epochs)
+            return self._sgd(X, y, lr, epochs, val_X, val_y)
         elif strategy == "mBGD":
-            return self._mbgd(X, y, lr, epochs, batch_size)
+            return self._mbgd(X, y, lr, epochs, batch_size, val_X, val_y)
         else:
             raise ValueError(f"Invalid strategy '{strategy}'. Choose one of ['BGD', 'SGD', 'mBGD'].")
 
