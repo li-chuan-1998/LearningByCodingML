@@ -4,8 +4,8 @@ from sklearn.datasets import make_regression
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import SGDRegressor
 from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-# np.random.seed(42)  # to make this code example reproducible
 
 def compare_models(X_train, y_train, X_test, y_test):
     """
@@ -16,16 +16,15 @@ def compare_models(X_train, y_train, X_test, y_test):
     - X_test, y_test: Testing data and labels.
     """
     # Training the custom model
-    my_model = LinearRegressionModel(inputs=X_train, labels=y_train, validation_split=0.1)
-    my_model.train_gradient_descent(strategy="SGD", lr=0.01, epochs=100, batch_size=50)
-    # my_model.train_pseudoinverse()
+    my_model = LinearRegressionModel(inputs=X_train, labels=y_train, validation_split=0.1, loss_fn=mean_squared_error, scaler=StandardScaler())
+    my_model.train()
 
     # Training the SGDRegressor from sklearn
     sgd_reg = SGDRegressor(max_iter=10000, tol=1e-5, penalty=None, eta0=0.01, n_iter_no_change=5, random_state=42)
     sgd_reg.fit(X_train, y_train.ravel())  # y.ravel() because fit() expects 1D targets
 
     # Predictions
-    y_pred_my_model = my_model.predict(X_test, scaled=True)  # Assuming the data should be scaled
+    y_pred_my_model = my_model.predict(X_test, is_scaled=True)  # Assuming the data should be scaled
     y_pred_sgd_reg = sgd_reg.predict(X_test).reshape(-1, 1)  # Reshaping to match the shape
 
     # Calculate MSE
