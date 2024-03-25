@@ -2,18 +2,28 @@ import numpy as np
 from sklearn.preprocessing import add_dummy_feature, StandardScaler, MinMaxScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
-from tqdm import tqdm, trange
+from tqdm import tqdm
 
 
 class LinearRegressionModel:
-    def __init__(self, inputs: np.array, labels: np.array, scaler=None, loss_fn=None,validation_split=0.1) -> None:
-        """
-        Initialize the Linear Regression Model.
-        
+    def __init__(self, inputs: np.array, labels: np.array, scaler=StandardScaler, loss_fn=None, validation_split=0.2) -> None:
+        """        
         Args:
-        - inputs (np.array): Input data of shape (number of instances, number of features).
-        - labels (np.array): Corresponding labels of shape (number of instances, 1).
-        - validation_split (float, optional): Fraction of data to be used as validation set. Defaults to 0.1.
+        - inputs (np.array): The input data. Shape: (number of instances, number of features).
+        - labels (np.array): The corresponding labels for the input data. (Shape: number of instances, 1)
+        
+        - scaler (optional): A scaling method to normalize/standardize the data. (Default: StandardScaler)
+        - loss_fn (optional): A custom loss function for model training. (Default: Mean Squared Error (MSE))
+        - validation_split (optional): Fraction of the total data to be set aside for validation. (Default: 20%).
+        
+        Attributes:
+        - train_inputs (np.array): Training data after split. Shape: (number of training instances, number of features).
+        - val_inputs (np.array): Validation data after split. Shape: (number of validation instances, number of features).
+        - train_labels (np.array): Labels for the training data. Shape: (number of training instances, 1).
+        - val_labels (np.array): Labels for the validation data. Shape: (number of validation instances, 1).
+        - trainable_params (np.array): Parameters to be optimized during training. Initialized with small random values. Shape: (number of features + 1, 1).
+        - scaler: The provided scaling method or None.
+        - loss_fn: The provided loss function or default MSE.
         
         Raises:
         - AssertionError: If the number of instances in inputs and labels don't match.
@@ -29,7 +39,7 @@ class LinearRegressionModel:
         self.trainable_params = np.random.rand(self.train_inputs.shape[1] + 1, 1) * 0.01
         
         self.scaler = scaler
-        self.loss_fn = loss_fn or self._mse_loss
+        self.loss_fn = loss_fn or mean_squared_error
         
     
     """Closed-form solutions""" 
@@ -37,9 +47,7 @@ class LinearRegressionModel:
     # These 2 approach get very slow when the number of features grows large
     # The symbol "@" in numpy, tensorflow and pytorch is equivalent to matrix multiplication
     def _normal_eqn(self, X: np.array, y: np.array) -> np.array:
-        """
-        Compute the optimal parameters using the Normal Equation.
-        
+        """        
         Args:
         - X (np.array): Input data of shape (number of instances, number of features + 1).
         - y (np.array): Corresponding labels of shape (number of instances, 1).
@@ -50,9 +58,7 @@ class LinearRegressionModel:
         return np.linalg.inv(X.T @ X) @ X.T @ y
 
     def _pseudoinverse(self, X: np.array, y: np.array) -> np.array:
-        """
-        Compute the optimal parameters using the Pseudoinverse.
-        
+        """        
         Args:
         - X (np.array): Input data of shape (number of instances, number of features + 1).
         - y (np.array): Corresponding labels of shape (number of instances, 1).
@@ -66,20 +72,18 @@ class LinearRegressionModel:
     """Gradient Descent"""
     # Batch Gradient Descent (BGD)
     # 1) ensure that all features have a similar scale (i.e. feature scaling) for faster convergence
-    # 2) If a cost function is a convex & continuous function it is gurunteed that it will find the global minima
+    # 2) If a cost function is a convex & continuous function, it is gurunteed that it will find the global minima
     
     # Stochastic Gradient Descent (SGD)
     # 1) Unlike BGD that uses entire training set, SGD uses only 1 random data point for training
     # 2) Due to its stochastic nature, much less regular than BGD, the cost function will bounce up and down, 
-    # decreasing only on average. You can gradually decrease the learning rate to resolve this issue (learning schedule)
+    #    decreasing only on average. You can gradually decrease the learning rate to resolve this issue (learning schedule)
     # 3) However, also this stochastic nature can help to jump out of local minima for irregular cost function
     
     # Mini-Batch Gradient Descent (mBGD)
     # 1) More stable than SGD by using a batch size of data points 
     def _bgd(self, X: np.array, y: np.array, lr: float, epochs: int, val_X=None, val_y=None) -> np.array:
         """
-        Batch Gradient Descent strategy.
-        
         Args:
         - X (np.array): Input data of shape (number of instances, number of features + 1).
         - y (np.array): Corresponding labels of shape (number of instances, 1).
@@ -103,9 +107,7 @@ class LinearRegressionModel:
         return self.trainable_params
 
     def _sgd(self, X: np.array, y: np.array, lr: float, epochs: int, val_X=None, val_y=None) -> np.array:
-        """
-        Stochastic Gradient Descent strategy.
-        
+        """        
         Args:
         - X (np.array): Input data of shape (number of instances, number of features + 1).
         - y (np.array): Corresponding labels of shape (number of instances, 1).
@@ -132,8 +134,6 @@ class LinearRegressionModel:
 
     def _mbgd(self, X: np.array, y: np.array, lr: float, epochs: int, batch_size: int, val_X=None, val_y=None) -> np.array:
         """
-        Mini-Batch Gradient Descent strategy.
-        
         Args:
         - X (np.array): Input data of shape (number of instances, number of features + 1).
         - y (np.array): Corresponding labels of shape (number of instances, 1).
@@ -176,15 +176,22 @@ class LinearRegressionModel:
             epoch_iterator.set_postfix({"Training Loss": train_loss})
         
     def train(self, strategy: str = "pseudoinverse", lr: float = 0.01, epochs: int = 100, batch_size: int = 32) -> np.array:
+        """
+        Args:
+        - strategy (str): Input data of shape (number of instances, number of features + 1).
+        
+        Returns:
+        - np.array: Updated parameters after training.
+        """
         # reset the trainable_params 
         self.trainable_params = np.random.rand(self.train_inputs.shape[1] + 1, 1) * 0.01
         
         # Preprocess the training data
-        X = add_dummy_feature(self.scaler.fit_transform(self.train_inputs))
+        X = add_dummy_feature(self.scaler.fit_transform(self.train_inputs) if self.scaler else self.train_inputs)
         y = self.train_labels
         
         # Preprocess the validation data
-        val_X = add_dummy_feature(self.scaler.transform(self.val_inputs))
+        val_X = add_dummy_feature(self.scaler.transform(self.val_inputs) if self.scaler else self.val_inputs)
         val_y = self.val_labels
         
         strategies = {
@@ -202,9 +209,7 @@ class LinearRegressionModel:
         return self.trainable_params
 
     def predict(self, new_inputs: np.array, is_scaled: bool = True, is_training: bool = False) -> np.array:
-        """
-        Predict the output for new input data.
-        
+        """        
         Args:
         - new_inputs (np.array): New input data of shape (number of instances, number of features).
         - scaled (bool, optional): Whether to scale the input data before prediction. Defaults to True.
@@ -216,7 +221,7 @@ class LinearRegressionModel:
         if is_training:
             transformed_inputs = new_inputs
         elif is_scaled:
-            transformed_inputs = add_dummy_feature(self.scaler.transform(new_inputs))
+            transformed_inputs = add_dummy_feature(self.scaler.transform(new_inputs) if self.scaler else new_inputs)
         else:
             transformed_inputs = add_dummy_feature(new_inputs)
         return transformed_inputs @ self.trainable_params
@@ -225,27 +230,14 @@ class LinearRegressionModel:
         """
         Demonstrate the various training methods and their results.
         """
-        print("\nTesting the Linear Model:")
+        print("\Running all the different Linear Models:")
         
-        print("\nTraining using Normal Equation:")
-        self.train(strategy="normal_eqn")
-        print(self)
-        
-        print("\nTraining using Pseudoinverse:")
-        self.train(strategy="pseudoinverse")
-        print(self)
-        
-        print("\nTraining using Batch Gradient Descent:")
-        self.train(strategy="BGD")
-        print(self)
-        
-        print("\nTraining using Stochastic Gradient Descent:")
-        self.train(strategy="SGD")
-        print(self)
-        
-        print("\nTraining using Mini-Batch Gradient Descent:")
-        self.train(strategy="mBGD")
-        print(self)
+        strats = ["normal_eqn","pseudoinverse","BGD","SGD","mBGD"]
+        for strat in strats:
+            print(f"Training using {strat}:")
+            self.train(strategy=strat)
+            print(self.trainable_params)
+
 
     def __repr__(self) -> str:
         params = [f"{x:.5}" for x in self.trainable_params.ravel().tolist()]
@@ -259,5 +251,5 @@ if __name__ == "__main__":
     X = 2 * np.random.rand(m, 1)  # column vector
     y = 4 + 3 * X + np.random.randn(m, 1)  # column vector
     
-    model = LinearRegressionModel(X, y, scaler=StandardScaler(), loss_fn=mean_squared_error)
+    model = LinearRegressionModel(X, y)
     model.demonstrate()
